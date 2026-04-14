@@ -162,10 +162,13 @@ class BaseModel(ABC):
         feature_cols = list(test.columns)
         target_idx   = feature_cols.index(target_col)
 
+        # Use scaler's own dimension — not len(feature_cols) — because the
+        # test DataFrame may contain raw OHLCV columns beyond what scaler saw.
+        n_scaler_cols = len(scaler.scale_)
+
         def _inverse(values: np.ndarray) -> np.ndarray:
             """Inverse-transform a 1-D array using the fitted scaler."""
-            n_features = scaler.n_features_in_
-            dummy = np.zeros((len(values), n_features))
+            dummy = np.zeros((len(values), n_scaler_cols))
             dummy[:, target_idx] = values
             return scaler.inverse_transform(dummy)[:, target_idx]
 
@@ -278,9 +281,12 @@ def naive_baseline_metrics(
     feature_cols = list(test.columns)
     target_idx   = feature_cols.index(target_col)
 
+    # Use scaler's own dimension (n_features it was fitted on),
+    # NOT test.columns — test may have more columns than the scaler saw.
+    n_scaler_cols = len(scaler.scale_)
+
     def _inverse(values: np.ndarray) -> np.ndarray:
-        n_features = scaler.n_features_in_
-        dummy = np.zeros((len(values), n_features))
+        dummy = np.zeros((len(values), n_scaler_cols))
         dummy[:, target_idx] = values
         return scaler.inverse_transform(dummy)[:, target_idx]
 

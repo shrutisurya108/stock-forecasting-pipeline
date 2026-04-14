@@ -20,8 +20,11 @@ PREDICTIONS_DIR = ROOT_DIR / "predictions"
 LOGS_DIR        = ROOT_DIR / "logs"
 MODELS_DIR      = ROOT_DIR / "models"
 
+# Saved model artifacts live inside predictions/models/{ticker}/
+SAVED_MODELS_DIR = PREDICTIONS_DIR / "models"
+
 # Ensure directories always exist at import time
-for _dir in [DATA_DIR, PREDICTIONS_DIR, LOGS_DIR]:
+for _dir in [DATA_DIR, PREDICTIONS_DIR, LOGS_DIR, SAVED_MODELS_DIR]:
     _dir.mkdir(parents=True, exist_ok=True)
 
 
