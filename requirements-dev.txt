@@ -1,0 +1,13 @@
+# Inherits all production deps
+-r requirements.txt
+
+# ── Testing — all pyreadiness ✓ on Python 3.14 ────────────────────────────────
+pytest>=8.3.3
+pytest-cov>=5.0.0
+pytest-mock>=3.14.0
+
+# ── Code Quality — all pyreadiness ✓ on Python 3.14 ──────────────────────────
+black>=24.10.0                # pyreadiness ✓
+isort>=5.13.2                 # pyreadiness ✓
+# Note: flake8 is NOT yet tagged 3.14 on pyreadiness; use ruff as a drop-in
+ruff>=0.4.0                   # pyreadiness ✓; faster linter, replaces flake8

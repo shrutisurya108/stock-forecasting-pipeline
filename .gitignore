@@ -1,0 +1,72 @@
+# ── Environment & Secrets ─────────────────────────────────────────────────────
+.env
+*.env
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+pip-wheel-metadata/
+
+# ── Virtual Environments ──────────────────────────────────────────────────────
+venv/
+env/
+.venv/
+.env/
+ENV/
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Data (raw CSVs fetched from yfinance — reproducible, not tracked) ─────────
+data/raw/*.csv
+data/raw/*.parquet
+data/raw/*.json
+!data/raw/.gitkeep
+
+# ── Model Artifacts (large binaries — stored in S3) ───────────────────────────
+*.pkl
+*.joblib
+*.pt
+*.pth
+*.h5
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs/*.log
+logs/*.log.*
+!logs/.gitkeep
+
+# ── Predictions (uploaded to S3, not tracked in Git) ─────────────────────────
+predictions/*.csv
+predictions/*.json
+predictions/*.parquet
+!predictions/.gitkeep
+
+# ── Testing & Coverage ────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# ── IDEs ──────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Streamlit ─────────────────────────────────────────────────────────────────
+.streamlit/secrets.toml
+
+# ── Prophet / Stan ────────────────────────────────────────────────────────────
+prophet_cache/
