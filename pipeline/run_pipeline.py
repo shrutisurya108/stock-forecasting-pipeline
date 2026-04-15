@@ -61,6 +61,7 @@ from data.preprocessing import preprocess_all
 from forecasting.predictor import generate_all_predictions, save_all_predictions
 from training.benchmarking import run_benchmark
 from training.trainer import train_all, load_model
+from storage.s3_client import S3Client
 
 logger = get_logger(__name__)
 
@@ -264,6 +265,21 @@ def _load_existing_models(
     return fitted
 
 
+def stage_upload(client) -> tuple[object, float]:
+    """
+    Stage 6 — Upload predictions and benchmarks to S3.
+
+    Args:
+        client: An S3Client instance.
+
+    Returns:
+        (UploadResult, elapsed_seconds)
+    """
+    t0     = time.time()
+    result = client.upload_all_predictions()
+    return result, time.time() - t0
+
+
 # ── Main pipeline entry point ─────────────────────────────────────────────────
 
 def main(
@@ -303,7 +319,8 @@ def main(
     run_log = get_run_logger(run_id)
     t_start = time.time()
 
-    result = PipelineResult(run_id=run_id, mode=mode)
+    result    = PipelineResult(run_id=run_id, mode=mode)
+    s3_client = S3Client()
 
     # ── Header ────────────────────────────────────────────────────────────────
     divider = "═" * 55
@@ -319,7 +336,7 @@ def main(
     )
 
     try:
-        total_steps = 4 if mode == "forecast_only" else 5
+        total_steps = 5 if mode == "forecast_only" else 6
 
         # ── Stage 1: Fetch ────────────────────────────────────────────────────
         _step(1, total_steps, "Fetching stock data")
@@ -411,6 +428,32 @@ def main(
                 "Forecasts generated: %d tickers in %.1fs",
                 len(predictions), t,
             )
+
+        # ── Stage 6: Upload to S3 ─────────────────────────────────────────────
+        s3_step = forecast_step + 1
+        _step(s3_step, s3_step, "Uploading to S3")
+        if s3_client.is_available():
+            upload_result, t = stage_upload(s3_client)
+            if upload_result.success:
+                _ok(
+                    t,
+                    f"{upload_result.files_uploaded} files "
+                    f"({upload_result.bytes_uploaded:,} bytes)",
+                )
+                run_log.info(
+                    "S3 upload complete: %d files in %.1fs",
+                    upload_result.files_uploaded, t,
+                )
+            else:
+                _fail(
+                    f"S3 upload partial: "
+                    f"{upload_result.files_uploaded} ok, "
+                    f"{upload_result.files_failed} failed"
+                )
+                result.errors.extend(upload_result.errors)
+        else:
+            _skip("AWS credentials not configured — set in .env to enable")
+            run_log.info("S3 upload skipped (credentials not set)")
 
         # ── Done ──────────────────────────────────────────────────────────────
         result.duration_s = round(time.time() - t_start, 2)
