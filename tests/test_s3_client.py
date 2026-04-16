@@ -488,6 +488,10 @@ def test_pipeline_uploads_when_s3_available():
         mock_s3_instance.upload_all_predictions.return_value = UploadResult(
             success=True, files_uploaded=5, bytes_uploaded=10240
         )
+        # upload_models is also called by stage_upload — must return UploadResult
+        mock_s3_instance.upload_models.return_value = UploadResult(
+            success=True, files_uploaded=3, bytes_uploaded=5120
+        )
         MockS3.return_value = mock_s3_instance
 
         result = main(
