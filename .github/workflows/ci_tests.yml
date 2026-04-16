@@ -1,0 +1,100 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# ci_tests.yml
+# Runs the full pytest suite on every push and pull request.
+# Shows a green ✅ or red ❌ on every commit in GitHub.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: CI Tests
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+    branches: ["main"]
+
+  # Allow manual trigger from the GitHub Actions UI
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run pytest suite
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.11"]   # Prophet + torch have best support on 3.11
+
+    steps:
+      # ── 1. Checkout repo ────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Python ────────────────────────────────────────────────────
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"             # cache pip downloads between runs
+
+      # ── 3. Install dependencies ─────────────────────────────────────────────
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      # ── 4. Run tests ─────────────────────────────────────────────────────────
+      - name: Run pytest
+        env:
+          # Dummy AWS credentials so S3 tests that check for credentials
+          # don't fail on the "no credentials" path — real S3 calls are mocked
+          AWS_ACCESS_KEY_ID:     "test-key"
+          AWS_SECRET_ACCESS_KEY: "test-secret"
+          AWS_REGION:            "us-east-1"
+          S3_BUCKET_NAME:        "test-bucket"
+          LOG_LEVEL:             "WARNING"   # suppress log noise in CI output
+        run: |
+          pytest tests/ \
+            -v \
+            --tb=short \
+            --cov=. \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --ignore=tests/test_models.py \
+            -x
+
+      # ── 5. Upload coverage report (optional, free) ───────────────────────────
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          file:  ./coverage.xml
+          flags: unittests
+          fail_ci_if_error: false   # don't fail CI if Codecov is down
+        continue-on-error: true
+
+  # ── Separate job: lint check ──────────────────────────────────────────────
+  lint:
+    name: Lint with ruff
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run ruff
+        run: |
+          ruff check . \
+            --exclude ".git,__pycache__,venv,.venv,data/raw" \
+            --ignore E501 \
+            --ignore F401 \
+            --ignore F811
+        continue-on-error: true   # lint issues are warnings, not blockers

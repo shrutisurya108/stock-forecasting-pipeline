@@ -1,5 +1,8 @@
 # 📈 Automated Time-Series Stock Forecasting Pipeline
 
+[![CI Tests](https://github.com/shrutisurya108/stock-forecasting-pipeline/actions/workflows/ci_tests.yml/badge.svg)](https://github.com/shrutisurya108/stock-forecasting-pipeline/actions/workflows/ci_tests.yml)
+[![Daily Retrain](https://github.com/shrutisurya108/stock-forecasting-pipeline/actions/workflows/daily_retrain.yml/badge.svg)](https://github.com/shrutisurya108/stock-forecasting-pipeline/actions/workflows/daily_retrain.yml)
+
 A production-grade, fully automated multi-model time-series forecasting system
 for 10 stocks, featuring daily retraining, cloud deployment, and an interactive
 Streamlit dashboard — built entirely on **free-tier** services.
@@ -132,7 +135,6 @@ All settings are in `config/settings.py`:
 - [ ] Phase 6 — Pipeline orchestration
 - [ ] Phase 7 — S3 storage
 - [ ] Phase 8 — Streamlit dashboard
-- [ ] Phase 9 — Tests
-- [ ] Phase 10 — GitHub Actions CI/CD
-- [ ] Phase 11 — AWS Lambda deployment
-- [ ] Phase 12 — Streamlit Cloud deployment
+- [x] Phase 9 — GitHub Actions CI/CD
+- [ ] Phase 10 — AWS Lambda deployment
+- [ ] Phase 11 — Streamlit Cloud deployment

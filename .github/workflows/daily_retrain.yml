@@ -1,0 +1,157 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# daily_retrain.yml
+# Runs the full forecasting pipeline every day at 01:00 UTC.
+# Also supports manual triggering from the GitHub Actions UI with mode choice.
+#
+# What it does:
+#   1. Fetches fresh stock data from Yahoo Finance
+#   2. Retrains ARIMA, Prophet, and LSTM models on all 10 tickers
+#   3. Generates 30-day forecasts with 95% CI bands
+#   4. Uploads predictions + benchmark results to AWS S3
+#   5. Streamlit dashboard then serves fresh data on next load
+#
+# Free tier usage:
+#   ~45 min/run × 30 runs/month = ~1,350 min/month
+#   GitHub Actions free tier:    2,000 min/month  ✅ within limit
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: Daily Retrain Pipeline
+
+on:
+  # ── Scheduled trigger: 01:00 UTC daily (after US market close) ────────────
+  schedule:
+    - cron: "0 1 * * *"
+
+  # ── Manual trigger from GitHub UI with configurable mode ──────────────────
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Pipeline mode"
+        required: true
+        default: "forecast_only"
+        type: choice
+        options:
+          - forecast_only    # fast: load saved models, generate new forecasts
+          - full             # slow: retrain all models + forecast (~45 min)
+          - single           # debug: one ticker only
+      ticker:
+        description: "Ticker for single mode (e.g. AAPL)"
+        required: false
+        default: "AAPL"
+      fast:
+        description: "Use 5 LSTM epochs (smoke-test speed)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+jobs:
+  retrain:
+    name: Run forecasting pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 90      # fail-safe: kill if still running after 90 min
+
+    steps:
+      # ── 1. Checkout repo ────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Python ────────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # ── 3. Install production dependencies ─────────────────────────────────
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ── 4. Determine pipeline mode ──────────────────────────────────────────
+      # On scheduled runs:   always use "full" (daily retrain)
+      # On manual runs:      use whatever the user selected in the UI
+      - name: Set pipeline mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "mode=full"       >> $GITHUB_OUTPUT
+            echo "ticker="         >> $GITHUB_OUTPUT
+            echo "fast=false"      >> $GITHUB_OUTPUT
+          else
+            echo "mode=${{ github.event.inputs.mode }}"     >> $GITHUB_OUTPUT
+            echo "ticker=${{ github.event.inputs.ticker }}" >> $GITHUB_OUTPUT
+            echo "fast=${{ github.event.inputs.fast }}"     >> $GITHUB_OUTPUT
+          fi
+
+      # ── 5. Run the pipeline ─────────────────────────────────────────────────
+      - name: Run pipeline — ${{ steps.mode.outputs.mode }} mode
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION:            ${{ secrets.AWS_REGION }}
+          S3_BUCKET_NAME:        ${{ secrets.S3_BUCKET_NAME }}
+          LOG_LEVEL:             "INFO"
+        run: |
+          MODE="${{ steps.mode.outputs.mode }}"
+          TICKER="${{ steps.mode.outputs.ticker }}"
+          FAST="${{ steps.mode.outputs.fast }}"
+
+          # Build the command
+          CMD="python -m pipeline.run_pipeline --mode $MODE"
+
+          if [ "$MODE" = "single" ] && [ -n "$TICKER" ]; then
+            CMD="$CMD --ticker $TICKER"
+          fi
+
+          if [ "$FAST" = "true" ]; then
+            CMD="$CMD --fast"
+          fi
+
+          echo "Running: $CMD"
+          $CMD
+
+      # ── 6. Save logs as artifact ────────────────────────────────────────────
+      - name: Upload run logs
+        if: always()           # upload even if pipeline failed
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-logs-${{ github.run_id }}
+          path: logs/
+          retention-days: 7    # keep logs for 7 days
+
+      # ── 7. Save predictions as artifact ─────────────────────────────────────
+      - name: Upload predictions
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: predictions-${{ github.run_id }}
+          path: |
+            predictions/*.csv
+            predictions/*.json
+          retention-days: 30   # keep predictions for 30 days
+
+      # ── 8. Post summary to GitHub job summary ───────────────────────────────
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## 📈 Pipeline Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Mode  | ${{ steps.mode.outputs.mode }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered by | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Run ID | ${{ github.run_id }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Timestamp | $(date -u '+%Y-%m-%d %H:%M UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Show benchmark results if the file was generated
+          if [ -f "predictions/benchmark_results.csv" ]; then
+            echo "### Benchmark Results" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            cat predictions/benchmark_results.csv >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
