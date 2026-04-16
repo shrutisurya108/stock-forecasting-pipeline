@@ -57,6 +57,19 @@ from typing import Any
 from config.logging_config import get_logger
 from pipeline.run_pipeline import main as run_pipeline_main, VALID_MODES
 
+# ── Lambda path override ──────────────────────────────────────────────────────
+# Lambda containers have a read-only filesystem except for /tmp (512 MB).
+# Override path settings so data, predictions, logs, and models all write
+# to /tmp instead of the read-only source directory.
+import os as _os
+if _os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+    from pathlib import Path as _Path
+    import config.settings as _s
+    _s.DATA_DIR        = _Path("/tmp/data/raw");        _s.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _s.PREDICTIONS_DIR = _Path("/tmp/predictions");     _s.PREDICTIONS_DIR.mkdir(parents=True, exist_ok=True)
+    _s.LOGS_DIR        = _Path("/tmp/logs");            _s.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    _s.SAVED_MODELS_DIR = _Path("/tmp/predictions/models"); _s.SAVED_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
 logger = get_logger(__name__)
 
 # ── Lambda execution environment detection ────────────────────────────────────

@@ -71,3 +71,8 @@ Thumbs.db
 # ── Prophet / Stan ────────────────────────────────────────────────────────────
 prophet_cache/
 .models_restored
+
+# ── Lambda deployment artifacts ─────────────────────────────────────────────
+.lambda_arn
+response.json
+.models_restored
