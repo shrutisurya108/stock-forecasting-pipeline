@@ -267,7 +267,10 @@ def _load_existing_models(
 
 def stage_upload(client) -> tuple[object, float]:
     """
-    Stage 6 — Upload predictions and benchmarks to S3.
+    Stage 6 — Upload predictions, benchmarks, AND model artifacts to S3.
+
+    Uploading model artifacts means future CI runs can restore them and
+    skip retraining, running in forecast_only mode instead of full (~40 min saved).
 
     Args:
         client: An S3Client instance.
@@ -275,8 +278,19 @@ def stage_upload(client) -> tuple[object, float]:
     Returns:
         (UploadResult, elapsed_seconds)
     """
-    t0     = time.time()
+    t0 = time.time()
+
+    # Upload prediction CSVs and benchmark results
     result = client.upload_all_predictions()
+
+    # Upload trained model artifacts so CI can restore them on next run
+    model_result = client.upload_models()
+    result.files_uploaded += model_result.files_uploaded
+    result.bytes_uploaded += model_result.bytes_uploaded
+    result.files_failed   += model_result.files_failed
+    if model_result.files_failed > 0:
+        result.errors.extend(model_result.errors)
+
     return result, time.time() - t0
 
 

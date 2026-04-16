@@ -70,3 +70,4 @@ Thumbs.db
 
 # ── Prophet / Stan ────────────────────────────────────────────────────────────
 prophet_cache/
+.models_restored

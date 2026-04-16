@@ -1,39 +1,30 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # daily_retrain.yml
 # Runs the full forecasting pipeline every day at 01:00 UTC.
-# Also supports manual triggering from the GitHub Actions UI with mode choice.
+# Also supports manual triggering from the GitHub Actions UI.
 #
-# What it does:
-#   1. Fetches fresh stock data from Yahoo Finance
-#   2. Retrains ARIMA, Prophet, and LSTM models on all 10 tickers
-#   3. Generates 30-day forecasts with 95% CI bands
-#   4. Uploads predictions + benchmark results to AWS S3
-#   5. Streamlit dashboard then serves fresh data on next load
-#
-# Free tier usage:
-#   ~45 min/run × 30 runs/month = ~1,350 min/month
-#   GitHub Actions free tier:    2,000 min/month  ✅ within limit
+# Key design: GitHub Actions always runs in a fresh container.
+# Saved models are stored in S3 after each full run, then restored
+# at the start of the next run so we can skip retraining when possible.
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: Daily Retrain Pipeline
 
 on:
-  # ── Scheduled trigger: 01:00 UTC daily (after US market close) ────────────
   schedule:
     - cron: "0 1 * * *"
 
-  # ── Manual trigger from GitHub UI with configurable mode ──────────────────
   workflow_dispatch:
     inputs:
       mode:
         description: "Pipeline mode"
         required: true
-        default: "forecast_only"
+        default: "full"
         type: choice
         options:
-          - forecast_only    # fast: load saved models, generate new forecasts
-          - full             # slow: retrain all models + forecast (~45 min)
-          - single           # debug: one ticker only
+          - full
+          - forecast_only
+          - single
       ticker:
         description: "Ticker for single mode (e.g. AAPL)"
         required: false
@@ -51,43 +42,70 @@ jobs:
   retrain:
     name: Run forecasting pipeline
     runs-on: ubuntu-latest
-    timeout-minutes: 90      # fail-safe: kill if still running after 90 min
+    timeout-minutes: 90
 
     steps:
-      # ── 1. Checkout repo ────────────────────────────────────────────────────
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. Set up Python ────────────────────────────────────────────────────
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
 
-      # ── 3. Install production dependencies ─────────────────────────────────
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # ── 4. Determine pipeline mode ──────────────────────────────────────────
-      # On scheduled runs:   always use "full" (daily retrain)
-      # On manual runs:      use whatever the user selected in the UI
-      - name: Set pipeline mode
+      # ── Restore saved models from S3 ────────────────────────────────────────
+      # GitHub Actions containers are ephemeral — no models persist between runs.
+      # We store trained models in S3 after each full run, and restore them here
+      # so subsequent runs can use forecast_only mode instead of retraining.
+      - name: Restore models from S3
+        id: restore
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION:            ${{ secrets.AWS_REGION }}
+          S3_BUCKET_NAME:        ${{ secrets.S3_BUCKET_NAME }}
+        run: |
+          python3 scripts/restore_models.py
+          if [ -f ".models_restored" ]; then
+            echo "has_models=true" >> $GITHUB_OUTPUT
+            echo "✅ Models restored from S3"
+          else
+            echo "has_models=false" >> $GITHUB_OUTPUT
+            echo "ℹ️  No saved models in S3 — will run full training"
+          fi
+        continue-on-error: true
+
+      # ── Determine final mode ─────────────────────────────────────────────────
+      - name: Resolve pipeline mode
         id: mode
         run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "mode=full"       >> $GITHUB_OUTPUT
-            echo "ticker="         >> $GITHUB_OUTPUT
-            echo "fast=false"      >> $GITHUB_OUTPUT
+            # Scheduled: always do full retrain to keep models fresh
+            echo "mode=full"     >> $GITHUB_OUTPUT
+            echo "ticker="       >> $GITHUB_OUTPUT
+            echo "fast=false"    >> $GITHUB_OUTPUT
           else
-            echo "mode=${{ github.event.inputs.mode }}"     >> $GITHUB_OUTPUT
+            REQUESTED="${{ github.event.inputs.mode }}"
+            HAS_MODELS="${{ steps.restore.outputs.has_models }}"
+
+            # If forecast_only was requested but no models exist, promote to full
+            if [ "$REQUESTED" = "forecast_only" ] && [ "$HAS_MODELS" != "true" ]; then
+              echo "⚠️  forecast_only requested but no saved models found — promoting to full"
+              echo "mode=full"   >> $GITHUB_OUTPUT
+            else
+              echo "mode=$REQUESTED" >> $GITHUB_OUTPUT
+            fi
             echo "ticker=${{ github.event.inputs.ticker }}" >> $GITHUB_OUTPUT
             echo "fast=${{ github.event.inputs.fast }}"     >> $GITHUB_OUTPUT
           fi
 
-      # ── 5. Run the pipeline ─────────────────────────────────────────────────
+      # ── Run the pipeline ─────────────────────────────────────────────────────
       - name: Run pipeline — ${{ steps.mode.outputs.mode }} mode
         env:
           AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -100,7 +118,6 @@ jobs:
           TICKER="${{ steps.mode.outputs.ticker }}"
           FAST="${{ steps.mode.outputs.fast }}"
 
-          # Build the command
           CMD="python -m pipeline.run_pipeline --mode $MODE"
 
           if [ "$MODE" = "single" ] && [ -n "$TICKER" ]; then
@@ -114,16 +131,14 @@ jobs:
           echo "Running: $CMD"
           $CMD
 
-      # ── 6. Save logs as artifact ────────────────────────────────────────────
       - name: Upload run logs
-        if: always()           # upload even if pipeline failed
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pipeline-logs-${{ github.run_id }}
           path: logs/
-          retention-days: 7    # keep logs for 7 days
+          retention-days: 7
 
-      # ── 7. Save predictions as artifact ─────────────────────────────────────
       - name: Upload predictions
         if: success()
         uses: actions/upload-artifact@v4
@@ -132,9 +147,8 @@ jobs:
           path: |
             predictions/*.csv
             predictions/*.json
-          retention-days: 30   # keep predictions for 30 days
+          retention-days: 30
 
-      # ── 8. Post summary to GitHub job summary ───────────────────────────────
       - name: Write job summary
         if: always()
         run: |
@@ -146,9 +160,6 @@ jobs:
           echo "| Triggered by | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Run ID | ${{ github.run_id }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Timestamp | $(date -u '+%Y-%m-%d %H:%M UTC') |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Show benchmark results if the file was generated
           if [ -f "predictions/benchmark_results.csv" ]; then
             echo "### Benchmark Results" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
