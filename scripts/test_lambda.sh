@@ -29,14 +29,15 @@ echo "Payload : ${PAYLOAD}"
 echo "This may take 1-3 minutes for forecast_only mode..."
 echo ""
 
-# Invoke and capture response
-# Use --cli-binary-format raw-in-base64-out with the raw JSON string directly
-# (do NOT manually base64-encode — the flag handles encoding automatically)
+# Invoke synchronously with a 900-second read timeout
+# --cli-read-timeout 900 ensures CLI waits the full 15 min Lambda maximum
 aws lambda invoke \
     --function-name "${LAMBDA_FUNCTION}" \
     --region "${AWS_REGION}" \
     --payload "${PAYLOAD}" \
     --cli-binary-format raw-in-base64-out \
+    --cli-read-timeout 900 \
+    --cli-connect-timeout 60 \
     response.json 2>&1 || true
 
 echo "── Response ─────────────────────────────────────────"
