@@ -489,8 +489,10 @@ def test_handler_response_body_has_required_keys(mock_run):
     assert required.issubset(set(body.keys()))
 
 
+@patch("pipeline.lambda_handler._restore_models_from_s3", return_value=True)
 @patch("pipeline.lambda_handler.run_pipeline_main")
-def test_handler_passes_mode_to_pipeline(mock_run):
+def test_handler_passes_mode_to_pipeline(mock_run, mock_restore):
+    """Models found in S3 (mocked) so forecast_only stays forecast_only."""
     mock_run.return_value = PipelineResult(
         run_id="2026-01-01",
         mode="forecast_only",
