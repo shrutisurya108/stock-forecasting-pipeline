@@ -33,6 +33,19 @@ if str(_PROJECT_ROOT) not in sys.path:
 import pandas as pd
 import streamlit as st
 
+# ── Load Streamlit Cloud secrets into environment variables ───────────────────
+# On Streamlit Cloud, credentials are stored as Secrets (not .env).
+# This block reads them and injects into os.environ so all downstream
+# code (s3_client.py, settings.py) can find them via os.getenv().
+try:
+    if hasattr(st, "secrets") and len(st.secrets) > 0:
+        for _key in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+                     "AWS_REGION", "S3_BUCKET_NAME"]:
+            if _key in st.secrets and _key not in os.environ:
+                os.environ[_key] = str(st.secrets[_key])
+except Exception:
+    pass  # Running locally — credentials come from .env file
+
 # ── Page config (must be the very first Streamlit call) ───────────────────────
 st.set_page_config(
     page_title="📈 Stock Forecasting Pipeline",

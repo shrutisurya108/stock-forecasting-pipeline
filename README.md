@@ -2,6 +2,9 @@
 
 [![CI Tests](https://github.com/shrutisurya108/stock-forecasting-pipeline/actions/workflows/ci_tests.yml/badge.svg)](https://github.com/shrutisurya108/stock-forecasting-pipeline/actions/workflows/ci_tests.yml)
 [![Daily Retrain](https://github.com/shrutisurya108/stock-forecasting-pipeline/actions/workflows/daily_retrain.yml/badge.svg)](https://github.com/shrutisurya108/stock-forecasting-pipeline/actions/workflows/daily_retrain.yml)
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://shrutisurya108-stock-forecasting-pipeline.streamlit.app)
+
+🔗 **[Live Dashboard](https://shrutisurya108-stock-forecasting-pipeline.streamlit.app)** — 30-day forecasts with 95% CI bands, updated daily
 
 A production-grade, fully automated multi-model time-series forecasting system
 for 10 stocks, featuring daily retraining, cloud deployment, and an interactive

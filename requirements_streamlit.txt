@@ -1,0 +1,30 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# requirements_streamlit.txt
+# Lightweight requirements for the Streamlit Cloud dashboard ONLY.
+#
+# Why separate from requirements.txt?
+# requirements.txt includes PyTorch, Prophet, pmdarima (~2 GB) which are
+# needed for training but NOT for the dashboard. The dashboard only:
+#   - Reads CSVs from AWS S3
+#   - Renders Plotly charts
+#   - Shows pandas DataFrames
+#
+# Using this file keeps Streamlit Cloud deploys fast (~2 min vs 15 min)
+# and within free-tier memory limits (1 GB RAM).
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+streamlit>=1.39.0
+plotly>=5.24.0
+
+# ── Data handling ─────────────────────────────────────────────────────────────
+pandas>=2.0.0
+numpy>=1.24.0
+
+# ── AWS S3 (reads forecasts uploaded by Lambda/GitHub Actions) ────────────────
+boto3>=1.35.0
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+python-dotenv>=1.0.1
+requests>=2.32.0
+pyarrow>=12.0.0
