@@ -141,3 +141,22 @@ All settings are in `config/settings.py`:
 - [x] Phase 9 — GitHub Actions CI/CD
 - [ ] Phase 10 — AWS Lambda deployment
 - [ ] Phase 11 — Streamlit Cloud deployment
+
+
+---
+
+## Collaboration
+This project was developed in collaboration with [Harshith Bhattaram](https://github.com/maniharshith68).
+
+## Acknowledgements
+This project was built in collaboration with [Harshith Bhattaram](https://github.com/maniharshith68).
+
+## 👤 Authors
+- [Harshith Bhattaram](https://github.com/maniharshith68)
+- [Shruti Kumari](https://github.com/shrutisurya108)
+
+
+
+
+
+
