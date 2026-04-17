@@ -8,7 +8,12 @@
 #   bash scripts/create_ecr.sh
 # ──────────────────────────────────────────────────────────────────────────────
 
-set -euo pipefail
+set -uo pipefail
+
+# Load .env if present
+if [ -f ".env" ]; then
+    set -a; source .env; set +a
+fi
 
 AWS_REGION="${AWS_REGION:-us-east-1}"
 ECR_REPO="stock-forecasting-pipeline"

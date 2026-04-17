@@ -13,7 +13,15 @@
 #   bash scripts/deploy_lambda.sh
 # ──────────────────────────────────────────────────────────────────────────────
 
-set -euo pipefail   # exit on error, undefined var, or pipe failure
+set -uo pipefail   # removed -e so we can handle errors gracefully
+
+# ── Load .env file if present ─────────────────────────────────────────────────
+if [ -f ".env" ]; then
+    set -a   # auto-export all variables
+    source .env
+    set +a
+    echo "✅ Loaded credentials from .env"
+fi
 
 # ── Configuration (edit these if needed) ─────────────────────────────────────
 AWS_REGION="${AWS_REGION:-us-east-1}"
@@ -84,13 +92,7 @@ if aws lambda get-function --function-name "${LAMBDA_FUNCTION}" \
         --function-name "${LAMBDA_FUNCTION}" \
         --memory-size "${LAMBDA_MEMORY}" \
         --timeout "${LAMBDA_TIMEOUT}" \
-        --environment "Variables={
-            AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID},
-            AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY},
-            AWS_REGION=${AWS_REGION},
-            S3_BUCKET_NAME=${S3_BUCKET_NAME:-stock-forecasting-pipeline},
-            LOG_LEVEL=INFO
-        }" \
+        --environment "Variables={S3_BUCKET_NAME=${S3_BUCKET_NAME:-stock-forecasting-pipeline},LOG_LEVEL=INFO}" \
         --region "${AWS_REGION}" \
         --output json > /dev/null
 
@@ -140,13 +142,7 @@ else
         --role "${ROLE_ARN}" \
         --memory-size "${LAMBDA_MEMORY}" \
         --timeout "${LAMBDA_TIMEOUT}" \
-        --environment "Variables={
-            AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID},
-            AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY},
-            AWS_REGION=${AWS_REGION},
-            S3_BUCKET_NAME=${S3_BUCKET_NAME:-stock-forecasting-pipeline},
-            LOG_LEVEL=INFO
-        }" \
+        --environment "Variables={S3_BUCKET_NAME=${S3_BUCKET_NAME:-stock-forecasting-pipeline},LOG_LEVEL=INFO}" \
         --region "${AWS_REGION}" \
         --output json > /dev/null
 

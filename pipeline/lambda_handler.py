@@ -57,18 +57,8 @@ from typing import Any
 from config.logging_config import get_logger
 from pipeline.run_pipeline import main as run_pipeline_main, VALID_MODES
 
-# ── Lambda path override ──────────────────────────────────────────────────────
-# Lambda containers have a read-only filesystem except for /tmp (512 MB).
-# Override path settings so data, predictions, logs, and models all write
-# to /tmp instead of the read-only source directory.
-import os as _os
-if _os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
-    from pathlib import Path as _Path
-    import config.settings as _s
-    _s.DATA_DIR        = _Path("/tmp/data/raw");        _s.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    _s.PREDICTIONS_DIR = _Path("/tmp/predictions");     _s.PREDICTIONS_DIR.mkdir(parents=True, exist_ok=True)
-    _s.LOGS_DIR        = _Path("/tmp/logs");            _s.LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    _s.SAVED_MODELS_DIR = _Path("/tmp/predictions/models"); _s.SAVED_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+# Note: /tmp path redirection is handled in config/settings.py directly
+# by detecting AWS_LAMBDA_FUNCTION_NAME at import time. No override needed here.
 
 logger = get_logger(__name__)
 
@@ -143,6 +133,47 @@ def _parse_event(event: dict) -> dict:
 
 # ── Main Lambda handler ───────────────────────────────────────────────────────
 
+def _restore_models_from_s3() -> bool:
+    """
+    Download saved model artifacts from S3 to /tmp before forecasting.
+
+    Lambda containers are ephemeral — no models persist between invocations.
+    This restores them from S3 so forecast_only mode works correctly.
+
+    Returns True if at least one model file was restored.
+    """
+    try:
+        from storage.s3_client import S3Client
+        from config.settings import SAVED_MODELS_DIR
+
+        client = S3Client()
+        if not client.is_available():
+            logger.warning("S3 not available — cannot restore models")
+            return False
+
+        s3 = client._get_client()
+        prefix = "models/"
+        n_restored = 0
+
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=client.bucket_name, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                key      = obj["Key"]
+                rel_path = key[len(prefix):]
+                local    = SAVED_MODELS_DIR / rel_path
+                local.parent.mkdir(parents=True, exist_ok=True)
+                ok = client.download_file(key, local)
+                if ok:
+                    n_restored += 1
+
+        logger.info("Restored %d model files from S3", n_restored)
+        return n_restored > 0
+
+    except Exception as exc:
+        logger.warning("Model restore failed (non-fatal): %s", exc)
+        return False
+
+
 def handler(event: dict, context: Any) -> dict:
     """
     AWS Lambda entry point.
@@ -182,6 +213,18 @@ def handler(event: dict, context: Any) -> dict:
         config["model_names"] or "all",
         config["run_benchmark_flag"],
     )
+
+    # ── Restore models from S3 (Lambda containers are always fresh) ───────────
+    # forecast_only mode needs saved models on disk. Since Lambda containers
+    # are ephemeral, restore them from S3 before running the pipeline.
+    if config.get("mode") in ("forecast_only", None):
+        logger.info("Restoring saved models from S3...")
+        has_models = _restore_models_from_s3()
+        if not has_models:
+            logger.warning(
+                "No models found in S3 — promoting forecast_only to full mode"
+            )
+            config["mode"] = "full"
 
     # ── Run pipeline ──────────────────────────────────────────────────────────
     try:

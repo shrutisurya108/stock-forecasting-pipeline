@@ -10,7 +10,12 @@
 #   bash scripts/test_lambda.sh full             # full retrain (slow!)
 # ──────────────────────────────────────────────────────────────────────────────
 
-set -euo pipefail
+set -uo pipefail
+
+# Load .env if present
+if [ -f ".env" ]; then
+    set -a; source .env; set +a
+fi
 
 AWS_REGION="${AWS_REGION:-us-east-1}"
 LAMBDA_FUNCTION="stock-forecasting-pipeline"
@@ -25,13 +30,14 @@ echo "This may take 1-3 minutes for forecast_only mode..."
 echo ""
 
 # Invoke and capture response
+# Use --cli-binary-format raw-in-base64-out with the raw JSON string directly
+# (do NOT manually base64-encode — the flag handles encoding automatically)
 aws lambda invoke \
     --function-name "${LAMBDA_FUNCTION}" \
     --region "${AWS_REGION}" \
-    --payload "$(echo ${PAYLOAD} | base64)" \
+    --payload "${PAYLOAD}" \
     --cli-binary-format raw-in-base64-out \
-    --log-type Tail \
-    response.json 2>&1 | grep -v "^LogResult" || true
+    response.json 2>&1 || true
 
 echo "── Response ─────────────────────────────────────────"
 cat response.json | python3 -m json.tool 2>/dev/null || cat response.json

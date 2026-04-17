@@ -15,10 +15,19 @@ load_dotenv()
 
 # ── Root Paths ────────────────────────────────────────────────────────────────
 ROOT_DIR        = Path(__file__).resolve().parent.parent
-DATA_DIR        = ROOT_DIR / "data" / "raw"
-PREDICTIONS_DIR = ROOT_DIR / "predictions"
-LOGS_DIR        = ROOT_DIR / "logs"
-MODELS_DIR      = ROOT_DIR / "models"
+
+# ── Lambda detection ──────────────────────────────────────────────────────────
+# Lambda containers have a read-only filesystem except for /tmp (512 MB).
+# When running in Lambda, redirect all write paths to /tmp so directory
+# creation and file writes succeed. Local runs use the project root as normal.
+import os as _os
+_IN_LAMBDA = bool(_os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+_WRITE_ROOT = Path("/tmp") if _IN_LAMBDA else ROOT_DIR
+
+DATA_DIR         = _WRITE_ROOT / "data" / "raw"
+PREDICTIONS_DIR  = _WRITE_ROOT / "predictions"
+LOGS_DIR         = _WRITE_ROOT / "logs"
+MODELS_DIR       = ROOT_DIR / "models"   # source code dir, read-only is fine
 
 # Saved model artifacts live inside predictions/models/{ticker}/
 SAVED_MODELS_DIR = PREDICTIONS_DIR / "models"

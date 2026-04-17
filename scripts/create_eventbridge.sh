@@ -8,7 +8,12 @@
 #   bash scripts/create_eventbridge.sh
 # ──────────────────────────────────────────────────────────────────────────────
 
-set -euo pipefail
+set -uo pipefail
+
+# Load .env if present
+if [ -f ".env" ]; then
+    set -a; source .env; set +a
+fi
 
 AWS_REGION="${AWS_REGION:-us-east-1}"
 RULE_NAME="stock-forecasting-daily"

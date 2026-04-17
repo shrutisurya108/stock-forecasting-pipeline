@@ -133,12 +133,20 @@ class S3Client:
             return self._client
         try:
             import boto3
-            self._client = boto3.client(
-                "s3",
-                region_name=self.region,
-                aws_access_key_id=AWS_ACCESS_KEY_ID or None,
-                aws_secret_access_key=AWS_SECRET_ACCESS_KEY or None,
-            )
+            import os
+            # In Lambda, credentials come from the IAM role automatically.
+            # Only pass explicit credentials when running locally with .env.
+            if os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+                # Lambda environment — use role-based credentials
+                self._client = boto3.client("s3", region_name=self.region)
+            else:
+                # Local environment — use explicit credentials from .env
+                self._client = boto3.client(
+                    "s3",
+                    region_name=self.region,
+                    aws_access_key_id=AWS_ACCESS_KEY_ID or None,
+                    aws_secret_access_key=AWS_SECRET_ACCESS_KEY or None,
+                )
             return self._client
         except Exception as exc:
             logger.error("Failed to create boto3 S3 client: %s", exc)
@@ -156,7 +164,10 @@ class S3Client:
         if self._available is not None:
             return self._available
 
-        if not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY:
+        import os
+        # In Lambda, credentials come from IAM role — skip explicit key check
+        in_lambda = bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+        if not in_lambda and (not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY):
             logger.warning(
                 "AWS credentials not set — S3 upload/download disabled. "
                 "Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env"
